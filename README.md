@@ -1,0 +1,2 @@
+- run `docker-compose up --build`
+- http://localhost:8001/data
