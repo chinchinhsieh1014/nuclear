@@ -24,13 +24,14 @@ try:
         host=url.hostname,     # Extract the host
         port=url.port          # Extract the port
     )
+    print("✅ Database connection successful")
 except OperationalError as e:
     print(f"Error connecting to the database: {e}")
     exit(1)
 
 # Load the CSV file into a pandas DataFrame
 try:
-    df = pd.read_csv("app/data/pump_sensor.csv")
+    df = pd.read_csv("/app/data/pump_sensor.csv")
 except Exception as e:
     print(f"Error reading CSV file: {e}")
     exit(1)

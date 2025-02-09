@@ -1,56 +1,185 @@
-from fastapi import FastAPI
-import pandas as pd
+import psycopg2
 import numpy as np
+import pandas as pd
+from fastapi import FastAPI, Query
+from pydantic import BaseModel
+from datetime import datetime
+from fastapi.responses import JSONResponse
+from typing import List
+import openai
+import time
+from threading import Thread
+from model import predict_failure
+
+# Set up OpenAI API key
+openai.api_key = "your-api-key-here"
 
 app = FastAPI()
 
+current_row_index = 0
+limit = 10 
 
-data = pd.read_csv("app/data/data_nuclear.csv")
+# Database connection parameters
+DB_CONFIG = {
+    "dbname": "pump_sensor_data",
+    "user": "postgres",
+    "password": "hackafuture",
+    "host": "db",  # Changed from localhost to 'db' (the name of the database service in Docker)
+    "port": "5432"
+}
 
-@app.get("/predictive_maintenance")
-def predictive_maintenance():    
-    # Get the last row of data    
-    last_row = data.tail(1)        
-    # Replace NaN values with None to make them JSON serializable    
-    last_row = last_row.replace({np.nan: None})        
-    # Convert to dictionary and return    
-    return {"message": "Predictive maintenance results", "data": last_row.to_dict('records')[0]}
+# Define the SensorData model
+class SensorData(BaseModel):
+    timestamp: datetime
+    sensor_00: float
+    sensor_01: float
+    sensor_02: float
+    sensor_03: float
+    sensor_04: float
+    sensor_05: float
+    sensor_06: float
+    sensor_07: float
+    sensor_08: float
+    sensor_09: float
+    sensor_10: float
+    sensor_11: float
+    sensor_12: float
+    sensor_13: float
+    sensor_14: float
+    sensor_15: float
+    sensor_16: float
+    sensor_17: float
+    sensor_18: float
+    sensor_19: float
+    sensor_20: float
+    sensor_21: float
+    sensor_22: float
+    sensor_23: float
+    sensor_24: float
+    sensor_25: float
+    sensor_26: float
+    sensor_27: float
+    sensor_28: float
+    sensor_29: float
+    sensor_30: float
+    sensor_31: float
+    sensor_32: float
+    sensor_33: float
+    sensor_34: float
+    sensor_35: float
+    sensor_36: float
+    sensor_37: float
+    sensor_38: float
+    sensor_39: float
+    sensor_40: float
+    sensor_41: float
+    sensor_42: float
+    sensor_43: float
+    sensor_44: float
+    sensor_45: float
+    sensor_46: float
+    sensor_47: float
+    sensor_48: float
+    sensor_49: float
+    sensor_50: float
+    sensor_51: float
+    machine_status: str
 
-@app.get("/anomaly_detection")
-def anomaly_detection():   
-     # Replace with actual anomaly detection logic    
-    return {"message": "Anomaly detection results"}
+def fetch_data():
+    global current_row_index  # Use the global variable to track the current index
 
-@app.get("/grid_optimization")
-def grid_optimization():    
-# Replace with actual grid optimization logic    
-    return {"message": "Grid optimization results"}
+    # Connect to PostgreSQL
+    conn = psycopg2.connect(**DB_CONFIG)
+    cursor = conn.cursor()
 
-@app.get("/digital_twin")
-def digital_twin():    
-# Replace with actual digital twin logic   
-    return {"message": "Digital twin representation"}
+    # Fetch rows using the global index with OFFSET
+    cursor.execute(f"SELECT * FROM pump_sensor_data LIMIT {limit} OFFSET {current_row_index};")
+    rows = cursor.fetchall()
 
-@app.get("/compliance_check")
-def compliance_check():    
-    # Replace with actual compliance checking logic    
-    return {"message": "Compliance check results"}
+    # Get column names from the cursor description
+    column_names = [desc[0] for desc in cursor.description]
 
-@app.get("/sensor_data")
-def sensor_data():
-    latest_data = data.tail(1).to_dict()    
-    return {"latest_sensor_data": latest_data}
+    # Convert data into a list of SensorData objects
+    sensor_data_list = []
+    for row in rows:
+        # Map row data to SensorData object
+        cleaned_row = {column_names[i]: row[i] for i in range(len(row))}
+        sensor_data = SensorData(**cleaned_row)
+        sensor_data_list.append(sensor_data)
 
-@app.get("/alerts")
-def alerts():    
-    # Replace with actual alert logic    
-    return {"message": "Alerts based on sensor data"}
+    # Close the connection
+    cursor.close()
+    conn.close()
 
-@app.get("/")
-def read_root():
-    return {"message": "Hello, World!"}
+    # Convert SensorData objects to dictionaries
+    sensor_data_values = [sensor.dict() for sensor in sensor_data_list]
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: str = None):
-    return {"item_id": item_id, "q": q}
+    # Sanitize the float values to avoid NaN or Infinity
+    for sensor_data in sensor_data_values:
+        for key, value in sensor_data.items():
+            if isinstance(value, float) and (np.isnan(value) or np.isinf(value)):
+                sensor_data[key] = 0.0  # Replace NaN or Inf with 0.0 (or any other value)
 
+    # List of sensors to exclude
+    exclude_sensors = [
+        "sensor_00", "sensor_06", "sensor_07", "sensor_08", "sensor_09",
+        "sensor_15", "sensor_37", "sensor_50"
+    ]
+
+    # Extract only the sensor values, excluding the ones in the exclude_sensors list
+    sensor_values = [
+        [sensor_data[f"sensor_{i:02}"] for i in range(52) if f"sensor_{i:02}" not in exclude_sensors]
+        for sensor_data in sensor_data_values
+    ]
+
+    # Increment the global index by 10 for the next fetch
+    current_row_index += limit
+
+    return sensor_values
+
+def process_data_with_model(sensor_data_values):
+    # Send data to the model for prediction
+    model_responses = []
+    for sensor_data in sensor_data_values:
+        # Clean the data: Convert to np.array and replace None or NaN with 0
+        sensor_data = np.array(sensor_data, dtype=np.float32)
+        # Replace NaN, Inf, or None values with 0
+        sensor_data = np.nan_to_num(sensor_data, nan=0.0, posinf=0.0, neginf=0.0)
+        response = predict_failure(sensor_data)
+        model_responses.append(response)
+    return model_responses
+
+def get_openai_response(data, results):
+    # Format the prompt with the data and model results
+    prompt = f"Here is the data and the results for Pump Sensor Prediction model:\n\n"
+    for i, row in enumerate(data):
+        prompt += f"Data {i+1}: {row}, Model Result: {results[i]}\n"
+
+    prompt += "\nPlease analyze and provide an output based on the above."
+
+    # Send the prompt to OpenAI
+    response = openai.Completion.create(
+        engine="gpt-3.5-turbo",  # Use the model of your choice
+        prompt=prompt,
+        max_tokens=150
+    )
+
+    return response.choices[0].text.strip()
+
+@app.get("/process_data")
+async def process_data():
+    # Step 1: Fetch data
+    data = fetch_data()
+    
+    # Step 2: Process data with the model
+    results = process_data_with_model(data)
+
+    # Step 3: Send data and results to OpenAI
+    # openai_output = get_openai_response(data, results)
+
+    # Step 4: Return the data, results, and OpenAI output to the frontend
+    return {
+        "data": data,
+        "model_results": results,
+        # "openai_output": openai_output
+    }

@@ -2,4 +2,7 @@ fastapi==0.95.0
 uvicorn==0.18.2
 psycopg2-binary==2.9.3
 pandas==1.5.3
-numpy==1.23.3
+tensorflow==2.10.0
+keras==2.10.0
+numpy==1.21.5
+openai==0.28

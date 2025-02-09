@@ -1,0 +1,35 @@
+# Use a slim Python image
+FROM python:3.10-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies (including libraries for TensorFlow)
+RUN apt-get update && apt-get install -y \
+    netcat-openbsd \
+    && apt-get clean
+
+# Copy requirements.txt first (to use Docker layer caching)
+COPY requirements.txt /app/
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the model directory and app code
+COPY ./models /app/models
+COPY . /app/
+
+# Set file permissions for the model file (ensure it's readable)
+RUN chmod +x /app/models/Pump_LSTM_Fapi_OOP_1.h5
+
+# Ensure entrypoint.sh is executable
+RUN chmod +x /app/entrypoint.sh
+
+# Expose the backend port
+EXPOSE 8001
+
+# Ensure Python output is logged immediately
+ENV PYTHONUNBUFFERED=1
+
+# Use the correct entrypoint script
+CMD ["/app/entrypoint.sh"]

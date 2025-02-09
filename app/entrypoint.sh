@@ -8,10 +8,12 @@ do
   sleep 1
 done
 
-# Run the getdata.py script to populate the database
-echo "Running data initialization script..."
-python3 app/database.py
+echo "Starting database initialization"
+python3 /app/database.py
+echo "Database initialization complete"
+
+sleep 5
 
 # Start FastAPI with Uvicorn
 echo "Starting FastAPI application..."
-exec uvicorn app.GetData:app --host 0.0.0.0 --port 8001 --reload
+exec uvicorn main:app --host 0.0.0.0 --port 8001 --reload
