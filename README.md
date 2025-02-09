@@ -1,3 +1,4 @@
+# 2025 Hackafuture
 - download the data ***pump_sensor.csv*** and put it in app/data
 - run `docker-compose up --build`
 - http://localhost:8001/data
